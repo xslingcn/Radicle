@@ -11,9 +11,17 @@ from data.requests.prefill_request import PrefillRequest, PrefillRequestManager
 from models.mock_model.simple_tokenizer import SimpleTokenizer
 from models.mock_model.simple_attention_model import SimpleAttentionModel
 
+
 @ray.remote
 class PrefillActor:
-    def __init__(self, config: PrefillerConfig, ref: "ray.actor.ActorHandle", model: str, tokenizer: str, controller: "ray.actor.ActorHandle"):
+    def __init__(
+        self,
+        config: PrefillerConfig,
+        ref: "ray.actor.ActorHandle",
+        model: str,
+        tokenizer: str,
+        controller: "ray.actor.ActorHandle",
+    ):
         self.ref = ref
         self.controller = controller
 
@@ -22,12 +30,12 @@ class PrefillActor:
 
         self.current_request: Optional[PrefillRequest] = None
         self.running = True
-        
+
         self.pending_requests: PrefillRequestManager = PrefillRequestManager()
 
         self.loop = asyncio.get_event_loop()
         self.process_task = None
-    
+
     def add_request(self, request: PrefillRequest):
         self.pending_requests.add(request)
 
@@ -41,10 +49,12 @@ class PrefillActor:
                 _, (K, V) = self.model.forward(tokens)
                 kv_cache = torch.cat([K, V], dim=0)
 
-                request.decoder.add_request(DecodeRequest.from_prefill_request(request, kv_cache))
-                
+                request.decoder.add_request(
+                    DecodeRequest.from_prefill_request(request, kv_cache)
+                )
+
                 self.current_request = None
-            else :
+            else:
                 print("prefiller idling")
 
     async def _main_loop(self):
@@ -67,6 +77,6 @@ class PrefillActor:
             self.process_task.cancel()
             self.process_task = None
         self.controller.unregister.remote(self.ref)
-            
+
     def ping(self) -> bool:
         return True

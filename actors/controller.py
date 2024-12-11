@@ -10,6 +10,7 @@ from data.role import Role
 from data.requests.user_request import UserRequest, UserRequestManager
 from data.stram_state import StreamState
 
+
 @ray.remote
 class Controller:
     def __init__(self, config: ControllerConfig):
@@ -63,17 +64,19 @@ class Controller:
     def stream_token(self, request_id: str, token: str, is_complete: bool) -> None:
         """Handle streaming tokens from decoder"""
         state = self.stream_states.get(request_id, StreamState())
-        
+
         if token:
             state.text += token
             print(f"Request {request_id}: {token}", end="", flush=True)
-        
+
         if is_complete:
             state.is_complete = True
             print(f"\nRequest {request_id} complete: {state.text}")
             del self.stream_states[request_id]
             for decoder in self.decoder.values():
-                decoder.requests = [r for r in decoder.requests if r.request_id != request_id]
+                decoder.requests = [
+                    r for r in decoder.requests if r.request_id != request_id
+                ]
         else:
             self.stream_states[request_id] = state
 

@@ -5,6 +5,7 @@ import torch
 
 from data.requests.prefill_request import PrefillRequest
 
+
 @dataclass(order=True)
 class DecodeRequest:
     arrival_time: float
@@ -15,7 +16,10 @@ class DecodeRequest:
 
     @staticmethod
     def from_prefill_request(prefill_request: PrefillRequest, kv_cache: torch.Tensor):
-        return DecodeRequest(prefill_request.arrival_time, prefill_request.request_id, kv_cache)
+        return DecodeRequest(
+            prefill_request.arrival_time, prefill_request.request_id, kv_cache
+        )
+
 
 class DecodeRequestManager:
     def __init__(self):

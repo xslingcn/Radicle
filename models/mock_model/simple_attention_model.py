@@ -2,6 +2,7 @@ import torch
 
 from config.models.mock_model.simple_attention_config import SimpleAttentionConfig
 
+
 class SimpleAttentionModel:
     def __init__(self, config: SimpleAttentionConfig):
         self.d_model = config.d_model
@@ -11,7 +12,9 @@ class SimpleAttentionModel:
         self.W_V = torch.randn(self.d_model, self.d_model)
         self.W_O = torch.randn(self.d_model, self.d_model)
 
-    def forward(self, input_ids, kv_cache=None) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+    def forward(
+        self, input_ids, kv_cache=None
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         x = torch.randn(input_ids.size(0), self.d_model)
         Q = x @ self.W_Q
         if kv_cache is None:

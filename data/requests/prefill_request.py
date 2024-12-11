@@ -5,6 +5,7 @@ import ray
 
 from data.requests.user_request import UserRequest
 
+
 @dataclass(order=True)
 class PrefillRequest:
     arrival_time: float
@@ -14,7 +15,13 @@ class PrefillRequest:
 
     @staticmethod
     def from_user_request(user_request: UserRequest, decoder: "ray.actor.ActorHandle"):
-        return PrefillRequest(user_request.arrival_time, user_request.request_id, user_request.prompt, decoder)
+        return PrefillRequest(
+            user_request.arrival_time,
+            user_request.request_id,
+            user_request.prompt,
+            decoder,
+        )
+
 
 class PrefillRequestManager:
     def __init__(self):
@@ -28,5 +35,3 @@ class PrefillRequestManager:
 
     def __len__(self):
         return len(self.pending_requests)
-    
-

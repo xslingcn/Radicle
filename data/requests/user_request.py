@@ -1,11 +1,13 @@
 from dataclasses import dataclass, field
 import heapq
 
+
 @dataclass(order=True)
 class UserRequest:
     arrival_time: float
     request_id: str = field(compare=False)
     prompt: str = field(compare=False)
+
 
 class UserRequestManager:
     def __init__(self):
