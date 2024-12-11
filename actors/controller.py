@@ -2,6 +2,7 @@ import asyncio
 import time
 import ray
 from typing import Optional
+from config.actors.controller_config import ControllerConfig
 from data.pd_actor import PDActor
 from data.requests.prefill_request import PrefillRequest
 from data.role import Role
@@ -9,12 +10,11 @@ from data.role import Role
 from data.requests.user_request import UserRequest, UserRequestManager
 from data.stram_state import StreamState
 
-REQUEST_TIMEOUT = 30.0
-
-
 @ray.remote
 class Controller:
-    def __init__(self):
+    def __init__(self, config: ControllerConfig):
+        self.request_timeout = config.request_timeout
+
         self.prefiller: dict["ray.actor.ActorHandle", PDActor] = {}
         self.decoder: dict["ray.actor.ActorHandle", PDActor] = {}
         self.pending_requests: UserRequestManager = UserRequestManager()
@@ -108,7 +108,7 @@ class Controller:
         for actor_type in [self.prefiller, self.decoder]:
             for actor_ref, actor in list(actor_type.items()):
                 for request in actor.requests:
-                    if current_time - request.arrival_time > REQUEST_TIMEOUT:
+                    if current_time - request.arrival_time > self.request_timeout:
                         if not self._check_actor_health(actor_ref):
                             self.unregister(actor_ref)
                             if request.request_id in self.stream_states:
