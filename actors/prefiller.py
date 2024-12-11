@@ -1,41 +1,72 @@
-from altair import Optional
-import ray
 import asyncio
-
+import ray
+from responses import stop
 import torch
-from data.request import Request
-from models.simple_attention_model import SimpleAttentionModel
-from ray.dag import InputNode
-from ray.experimental.compiled_dag_ref import CompiledDAGRef
+from typing import Optional
 
+from config.actors.prefiller_config import PrefillerConfig
+from config.models.mock_model.simple_attention_config import SimpleAttentionConfig
+from data.requests.decode_request import DecodeRequest
+from data.requests.prefill_request import PrefillRequest, PrefillRequestManager
+from models.mock_model.simple_tokenizer import SimpleTokenizer
+from models.mock_model.simple_attention_model import SimpleAttentionModel
 
 @ray.remote
 class PrefillActor:
-    def __init__(self, model: str, driver: "ray.actor.ActorHandle"):
-        self.model = SimpleAttentionModel()
+    def __init__(self, config: PrefillerConfig, ref: "ray.actor.ActorHandle", model: str, tokenizer: str, controller: "ray.actor.ActorHandle"):
+        self.ref = ref
+        self.controller = controller
 
-        assign_dag = driver.assign.bind(InputNode())
-        self.assign_dag = assign_dag.experimental_compile()
+        self.tokenizer = SimpleTokenizer()
+        self.model = SimpleAttentionModel(SimpleAttentionConfig())
 
-        insert_dag = driver.insert.bind(InputNode())
-        self.insert_dag = insert_dag.experimental_compile()
-
-        self.pending_requests: list[tuple[CompiledDAGRef, Request]] = []
+        self.current_request: Optional[PrefillRequest] = None
+        self.running = True
+        
+        self.pending_requests: PrefillRequestManager = PrefillRequestManager()
 
         self.loop = asyncio.get_event_loop()
-        self.loop.create_task(self.request_job())
-        self.loop.create_task(self.process_job())
+        self.process_task = None
+    
+    def add_request(self, request: PrefillRequest):
+        self.pending_requests.add(request)
 
-        self.executing = False
+    def _step(self):
+        if not self.current_request:
+            request = self.pending_requests.pop()
+            if request:
+                self.current_request = request
 
-    async def add_request(self, request: Request):
-        pass
+                tokens = self.tokenizer.encode(request.prompt)
+                _, (K, V) = self.model.forward(tokens)
+                kv_cache = torch.cat([K, V], dim=0)
 
-    async def step(self):
-        if self.pending_requests and self.executing == False:
-            self.executing = True
-            job_ref, request = self.pending_requests.pop(0)
-            output = self.model.forward(request.prompt)
-
-            self.insert_dag.execute(job_ref)
+                request.decoder.add_request(DecodeRequest.from_prefill_request(request, kv_cache))
                 
+                self.current_request = None
+            else :
+                print("prefiller idling")
+
+    async def _main_loop(self):
+        while self.running:
+            try:
+                self._step()
+                await asyncio.sleep(0.01)
+            except Exception as e:
+                print(f"Error in prefiller main loop: {e}")
+                stop()
+
+    def start(self):
+        if not self.process_task:
+            self.running = True
+            self.process_task = asyncio.create_task(self._main_loop())
+
+    def stop(self):
+        self.running = False
+        if self.process_task:
+            self.process_task.cancel()
+            self.process_task = None
+        self.controller.unregister.remote(self.ref)
+            
+    def ping(self) -> bool:
+        return True
