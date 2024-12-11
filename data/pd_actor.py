@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from data.requests.user_request import UserRequest
-from role import Role
+from data.role import Role
 import ray
 
 

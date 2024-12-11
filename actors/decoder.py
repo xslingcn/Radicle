@@ -1,7 +1,6 @@
 import asyncio
 import time
 import ray
-from responses import stop
 import torch
 from typing import Dict, List
 from collections import defaultdict
@@ -19,12 +18,11 @@ class DecodingActor:
     def __init__(
         self,
         config: DecoderConfig,
-        ref: "ray.actor.ActorHandle",
         model: str,
         tokenizer: str,
         controller: "ray.actor.ActorHandle",
     ):
-        self.ref = ref
+        self.ref = None
         self.controller = controller
 
         self.tokenizer = SimpleTokenizer()
@@ -43,6 +41,9 @@ class DecodingActor:
 
         self.loop = asyncio.get_event_loop()
         self.process_task = None
+
+    def set_ref(self, ref: "ray.actor.ActorHandle"):
+        self.ref = ref
 
     def add_request(self, request: DecodeRequest):
         self.pending_requests.add(request)
@@ -106,15 +107,6 @@ class DecodingActor:
             print(f"Error processing batch {batch_id}: {e}")
             self.controller.unregister.remote(self.ref)
 
-    async def _main_loop(self):
-        while self.running:
-            try:
-                self._step()
-                await asyncio.sleep(0.01)
-            except Exception as e:
-                print(f"Error in decoder main loop: {e}")
-                stop()
-
     def start(self):
         if not self.process_task:
             self.running = True
@@ -126,6 +118,15 @@ class DecodingActor:
             self.process_task.cancel()
             self.process_task = None
         self.controller.unregister.remote(self.ref)
+
+    async def _main_loop(self):
+        while self.running:
+            try:
+                self._step()
+                await asyncio.sleep(0.01)
+            except Exception as e:
+                print(f"Error in decoder {self.ref} main loop: {e}")
+                self.stop()
 
     def ping(self) -> bool:
         """Health check endpoint"""

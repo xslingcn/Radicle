@@ -1,6 +1,5 @@
 import asyncio
 import ray
-from responses import stop
 import torch
 from typing import Optional
 
@@ -17,12 +16,11 @@ class PrefillActor:
     def __init__(
         self,
         config: PrefillerConfig,
-        ref: "ray.actor.ActorHandle",
         model: str,
         tokenizer: str,
         controller: "ray.actor.ActorHandle",
     ):
-        self.ref = ref
+        self.ref = None
         self.controller = controller
 
         self.tokenizer = SimpleTokenizer()
@@ -35,6 +33,9 @@ class PrefillActor:
 
         self.loop = asyncio.get_event_loop()
         self.process_task = None
+
+    def set_ref(self, ref: "ray.actor.ActorHandle"):
+        self.ref = ref
 
     def add_request(self, request: PrefillRequest):
         self.pending_requests.add(request)
@@ -49,22 +50,13 @@ class PrefillActor:
                 _, (K, V) = self.model.forward(tokens)
                 kv_cache = torch.cat([K, V], dim=0)
 
-                request.decoder.add_request(
+                request.decoder.add_request.remote(
                     DecodeRequest.from_prefill_request(request, kv_cache)
                 )
 
                 self.current_request = None
             else:
-                print("prefiller idling")
-
-    async def _main_loop(self):
-        while self.running:
-            try:
-                self._step()
-                await asyncio.sleep(0.01)
-            except Exception as e:
-                print(f"Error in prefiller main loop: {e}")
-                stop()
+                pass
 
     def start(self):
         if not self.process_task:
@@ -77,6 +69,15 @@ class PrefillActor:
             self.process_task.cancel()
             self.process_task = None
         self.controller.unregister.remote(self.ref)
+
+    async def _main_loop(self):
+        while self.running:
+            try:
+                self._step()
+                await asyncio.sleep(0.01)
+            except Exception as e:
+                print(f"Error in prefiller main loop: {e}")
+                self.stop()
 
     def ping(self) -> bool:
         return True

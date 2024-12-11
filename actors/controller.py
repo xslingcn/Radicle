@@ -24,7 +24,7 @@ class Controller:
         self.loop = asyncio.get_event_loop()
         self.process_task = None
 
-    def register(self, actor_ref: "ray.actor.ActorHandle") -> Role:
+    def request_role(self):
         prefiller_count = len(self.prefiller)
         decoder_count = len(self.decoder)
 
@@ -34,16 +34,15 @@ class Controller:
         if prefiller_count == 0 or (
             prefiller_workload > decoder_workload and prefiller_count <= decoder_count
         ):
-            role = Role.PREFILLER
-        else:
-            role = Role.DECODER
+            return Role.PREFILLER
+        return Role.DECODER
 
+    def register(self, actor_ref: "ray.actor.ActorHandle", role: Role) -> None:
         pd_actor = PDActor(ref=actor_ref, requests=[], role=role)
         if role == Role.PREFILLER:
             self.prefiller[actor_ref] = pd_actor
         else:
             self.decoder[actor_ref] = pd_actor
-        return role
 
     def unregister(self, actor_ref: "ray.actor.ActorHandle") -> None:
         if actor_ref in self.prefiller:
